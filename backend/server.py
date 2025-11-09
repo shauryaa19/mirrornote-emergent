@@ -36,6 +36,7 @@ openai_client = OpenAI(
 # Initialize services
 auth_service = AuthService(db)
 payment_service = PaymentService(db)
+usage_service = UsageService(db)
 
 # Create the main app without a prefix
 app = FastAPI()
