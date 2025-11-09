@@ -450,7 +450,7 @@ Format as JSON array with this structure:
 """
     
     try:
-        response = openai_client.chat.completions.create(
+        response = openai_text_client.chat.completions.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": "You are an expert communication coach."},
