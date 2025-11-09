@@ -175,17 +175,14 @@ async def analyze_voice(request_data: VoiceAnalysisRequest, request: Request):
             with open(temp_audio_path, "wb") as f:
                 f.write(audio_bytes)
 
-            # Transcribe
-            if not MOCK_MODE and openai_client is not None:
-                with open(temp_audio_path, "rb") as audio_file:
-                    transcription = openai_client.audio.transcriptions.create(
-                        model="whisper-1",
-                        file=audio_file,
-                        response_format="text"
-                    )
-            else:
-                # Mock transcription in development
-                transcription = "(mock) Transcription generated for testing."
+            # Transcribe with Whisper
+            with open(temp_audio_path, "rb") as audio_file:
+                transcription_response = openai_client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio_file,
+                    response_format="text"
+                )
+                transcription = transcription_response if isinstance(transcription_response, str) else transcription_response.text
 
             # Clean up temp file (best-effort)
             try:
