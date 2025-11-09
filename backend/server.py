@@ -199,9 +199,9 @@ async def analyze_voice(request_data: VoiceAnalysisRequest, request: Request):
             with open(temp_audio_path, "wb") as f:
                 f.write(audio_bytes)
 
-            # Transcribe with Whisper
+            # Transcribe with Whisper (using direct OpenAI API)
             with open(temp_audio_path, "rb") as audio_file:
-                transcription_response = openai_client.audio.transcriptions.create(
+                transcription_response = openai_audio_client.audio.transcriptions.create(
                     model="whisper-1",
                     file=audio_file,
                     response_format="text"
