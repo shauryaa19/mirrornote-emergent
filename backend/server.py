@@ -353,7 +353,7 @@ Format your response as JSON with these exact keys:
 """
     
     try:
-        response = openai_client.chat.completions.create(
+        response = openai_text_client.chat.completions.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": "You are an expert voice and communication coach."},
