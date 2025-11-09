@@ -270,15 +270,14 @@ metadata:
 
 test_plan:
   current_focus:
+    - "Google Authentication Backend"
+    - "Usage Tracking & Limits"
     - "Backend API - Voice Analysis Endpoint"
-    - "Backend API - Get Assessment Results"
-    - "Recording Screen with Audio"
-    - "Processing Screen"
-    - "Results Screen with Analysis"
+    - "Payment & Subscription Backend"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
   - agent: "main"
-    message: "Completed initial implementation of The Mirror Note app. All screens created with sage green theme. Backend has OpenAI Whisper + GPT-4 integration using Emergent LLM key. MongoDB collections set up. Audio recording with expo-av implemented. Need to test backend endpoints with real audio data and full flow: record → process → results."
+    message: "UPDATE: Pulled Google Auth integration from GitHub. Removed MOCK_MODE from voice analysis - now uses real OpenAI Whisper/GPT-4 with Emergent LLM key. Added usage tracking service: Free plan (5 total assessments), Standard plan (₹499/month - 30 assessments). Updated payment backend for new pricing. Need to test: Auth flow, usage limits enforcement, voice analysis with real audio, payment flow."
