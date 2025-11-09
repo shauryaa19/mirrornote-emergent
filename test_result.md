@@ -270,13 +270,11 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Google Authentication Backend"
-    - "Usage Tracking & Limits"
     - "Backend API - Voice Analysis Endpoint"
-    - "Payment & Subscription Backend"
-  stuck_tasks: []
+  stuck_tasks:
+    - "Backend API - Voice Analysis Endpoint"
   test_all: false
-  test_priority: "high_first"
+  test_priority: "stuck_first"
 
 agent_communication:
   - agent: "main"
