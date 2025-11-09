@@ -18,11 +18,11 @@ class PaymentService:
     async def create_subscription_order(self, user_id: str, plan_type: str):
         """
         Create Razorpay order for subscription
+        Plans: Standard - ₹499/month (30 assessments per month)
         """
         # Plan amounts in paise
         plans = {
-            "monthly": 49900,  # ₹499
-            "yearly": 399900,  # ₹3,999
+            "standard": 49900,  # ₹499/month - 30 assessments
         }
         
         if plan_type not in plans:
