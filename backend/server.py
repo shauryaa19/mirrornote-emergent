@@ -134,6 +134,15 @@ async def payment_webhook(request: Request):
     """
     return await payment_service.handle_webhook(request)
 
+# ============ USAGE ENDPOINTS ============
+@api_router.get("/usage")
+async def get_usage(request: Request):
+    """
+    Get current user's usage statistics
+    """
+    user = await auth_service.get_current_user(request)
+    return await usage_service.get_user_usage(user["id"])
+
 # ============ VOICE ANALYSIS ENDPOINTS ============
 @api_router.post("/analyze-voice", response_model=VoiceAnalysisResponse)
 async def analyze_voice(request_data: VoiceAnalysisRequest, request: Request):
@@ -141,13 +150,20 @@ async def analyze_voice(request_data: VoiceAnalysisRequest, request: Request):
     Analyzes voice recording using OpenAI Whisper and GPT-4
     """
     try:
-        # Get authenticated user (optional - allow demo mode)
-        try:
-            user = await auth_service.get_current_user(request)
-            user_id = user["id"]
-        except HTTPException:
-            # Allow demo mode without auth
-            user_id = request_data.user_id or "demo_user"
+        # Get authenticated user (required for usage tracking)
+        user = await auth_service.get_current_user(request)
+        user_id = user["id"]
+        
+        # Check usage limits
+        usage_check = await usage_service.check_can_create_assessment(user_id)
+        if not usage_check["allowed"]:
+            raise HTTPException(
+                status_code=403, 
+                detail={
+                    "message": usage_check["reason"],
+                    "usage": usage_check["usage"]
+                }
+            )
         
         # Create assessment record
         assessment_id = str(uuid.uuid4())
