@@ -1,8 +1,9 @@
-from fastapi import FastAPI, APIRouter, File, UploadFile, Form, HTTPException
+from fastapi import FastAPI, APIRouter, File, UploadFile, Form, HTTPException, Request, Response
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
+import tempfile
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field
@@ -13,6 +14,8 @@ import base64
 import re
 import json
 from openai import OpenAI
+from auth import AuthService
+from payment import PaymentService
 
 
 ROOT_DIR = Path(__file__).parent
@@ -30,6 +33,10 @@ if not MOCK_MODE:
     openai_client = OpenAI(api_key=os.environ['OPENAI_API_KEY'])
 else:
     openai_client = None  # Will use mock responses
+
+# Initialize services
+auth_service = AuthService(db)
+payment_service = PaymentService(db)
 
 # Create the main app without a prefix
 app = FastAPI()
@@ -80,19 +87,75 @@ async def get_status_checks():
     status_checks = await db.status_checks.find().to_list(1000)
     return [StatusCheck(**status_check) for status_check in status_checks]
 
+# ============ AUTH ENDPOINTS ============
+@api_router.post("/auth/session")
+async def create_session(session_id: str, response: Response):
+    """
+    Exchange session_id from URL for session_token
+    """
+    return await auth_service.process_session_id(session_id, response)
+
+@api_router.get("/auth/me")
+async def get_me(request: Request):
+    """
+    Get current authenticated user
+    """
+    return await auth_service.get_current_user(request)
+
+@api_router.post("/auth/logout")
+async def logout(request: Request, response: Response):
+    """
+    Logout user
+    """
+    return await auth_service.logout(request, response)
+
+# ============ PAYMENT ENDPOINTS ============
+@api_router.post("/payment/create-order")
+async def create_payment_order(plan_type: str, request: Request):
+    """
+    Create Razorpay order for subscription
+    """
+    user = await auth_service.get_current_user(request)
+    return await payment_service.create_subscription_order(user["id"], plan_type)
+
+@api_router.post("/payment/verify")
+async def verify_payment(payment_data: dict, request: Request):
+    """
+    Verify Razorpay payment
+    """
+    # Ensure user is authenticated
+    await auth_service.get_current_user(request)
+    return await payment_service.verify_payment(payment_data)
+
+@api_router.post("/payment/webhook")
+async def payment_webhook(request: Request):
+    """
+    Handle Razorpay webhooks
+    """
+    return await payment_service.handle_webhook(request)
+
+# ============ VOICE ANALYSIS ENDPOINTS ============
 @api_router.post("/analyze-voice", response_model=VoiceAnalysisResponse)
-async def analyze_voice(request: VoiceAnalysisRequest):
+async def analyze_voice(request_data: VoiceAnalysisRequest, request: Request):
     """
     Analyzes voice recording using OpenAI Whisper and GPT-4
     """
     try:
+        # Get authenticated user (optional - allow demo mode)
+        try:
+            user = await auth_service.get_current_user(request)
+            user_id = user["id"]
+        except HTTPException:
+            # Allow demo mode without auth
+            user_id = request_data.user_id or "demo_user"
+        
         # Create assessment record
         assessment_id = str(uuid.uuid4())
         
         # Save initial assessment to database
         assessment = {
             "assessment_id": assessment_id,
-            "user_id": request.user_id,
+            "user_id": user_id,
             "recording_mode": request.recording_mode,
             "recording_time": request.recording_time,
             "audio_data": request.audio_base64,
@@ -107,22 +170,31 @@ async def analyze_voice(request: VoiceAnalysisRequest):
         try:
             # Decode base64 audio
             audio_bytes = base64.b64decode(request.audio_base64)
-            
-            # Save temporarily for Whisper API
-            temp_audio_path = f"/tmp/{assessment_id}.m4a"
+
+            # Save temporarily to a cross-platform temp directory
+            temp_dir = tempfile.gettempdir()
+            temp_audio_path = os.path.join(temp_dir, f"{assessment_id}.m4a")
             with open(temp_audio_path, "wb") as f:
                 f.write(audio_bytes)
-            
-            # Transcribe with Whisper
-            with open(temp_audio_path, "rb") as audio_file:
-                transcription = openai_client.audio.transcriptions.create(
-                    model="whisper-1",
-                    file=audio_file,
-                    response_format="text"
-                )
-            
-            # Clean up temp file
-            os.remove(temp_audio_path)
+
+            # Transcribe
+            if not MOCK_MODE and openai_client is not None:
+                with open(temp_audio_path, "rb") as audio_file:
+                    transcription = openai_client.audio.transcriptions.create(
+                        model="whisper-1",
+                        file=audio_file,
+                        response_format="text"
+                    )
+            else:
+                # Mock transcription in development
+                transcription = "(mock) Transcription generated for testing."
+
+            # Clean up temp file (best-effort)
+            try:
+                if os.path.exists(temp_audio_path):
+                    os.remove(temp_audio_path)
+            except Exception:
+                pass
             
             # Analyze transcription text
             analysis = analyze_transcription(transcription, request.recording_time)

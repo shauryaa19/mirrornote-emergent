@@ -5,11 +5,12 @@ import {
   StyleSheet,
   SafeAreaView,
   ActivityIndicator,
+  TouchableOpacity,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useAuth } from './context/AuthContext';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from './constants/theme';
 
@@ -38,9 +39,16 @@ export default function ProcessingScreen() {
       setStage('uploading');
       setProgress(25);
 
+      // Verify the recording file exists before reading
+      const fileInfo = await FileSystem.getInfoAsync(audioUri);
+      if (!fileInfo.exists) {
+        throw new Error('Recording file not found. Please re-record and try again.');
+      }
+
       // Read audio file as base64
       const audioBase64 = await FileSystem.readAsStringAsync(audioUri, {
-        encoding: FileSystem.EncodingType.Base64,
+        // Use string literal for SDK compatibility
+        encoding: 'base64',
       });
 
       // Stage 2: Transcribe

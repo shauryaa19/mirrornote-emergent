@@ -1,17 +1,22 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import axios from 'axios';
+import * as Linking from 'expo-linking';
+
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
+const AUTH_URL = 'https://auth.emergentagent.com';
 
 interface User {
   id: string;
   email: string;
   name: string;
+  picture?: string;
   isPremium: boolean;
 }
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (email: string, name: string) => Promise<void>;
+  loginWithGoogle: () => void;
   logout: () => Promise<void>;
   updatePremiumStatus: (isPremium: boolean) => void;
 }
@@ -23,48 +28,95 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadUser();
+    initializeAuth();
+    
+    // Listen for deep links (returning from Google auth)
+    const subscription = Linking.addEventListener('url', handleDeepLink);
+    
+    return () => subscription.remove();
   }, []);
 
-  const loadUser = async () => {
+  const initializeAuth = async () => {
     try {
-      const userData = await AsyncStorage.getItem('user');
-      if (userData) {
-        setUser(JSON.parse(userData));
+      // Check for session_id in URL (coming back from Google auth)
+      const url = await Linking.getInitialURL();
+      if (url) {
+        const { queryParams } = Linking.parse(url);
+        if (queryParams?.session_id) {
+          await processSessionId(queryParams.session_id as string);
+          return;
+        }
       }
+      
+      // Check existing session
+      await checkSession();
     } catch (error) {
-      console.error('Error loading user:', error);
+      console.error('Auth initialization error:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const login = async (email: string, name: string) => {
-    const newUser: User = {
-      id: Date.now().toString(),
-      email,
-      name,
-      isPremium: false,
-    };
-    await AsyncStorage.setItem('user', JSON.stringify(newUser));
-    setUser(newUser);
+  const handleDeepLink = async ({ url }: { url: string }) => {
+    const { queryParams } = Linking.parse(url);
+    if (queryParams?.session_id) {
+      await processSessionId(queryParams.session_id as string);
+    }
+  };
+
+  const processSessionId = async (sessionId: string) => {
+    try {
+      const response = await axios.post(
+        `${BACKEND_URL}/api/auth/session`,
+        { session_id: sessionId },
+        { withCredentials: true }
+      );
+      setUser(response.data);
+    } catch (error) {
+      console.error('Session processing error:', error);
+    }
+  };
+
+  const checkSession = async () => {
+    try {
+      const response = await axios.get(`${BACKEND_URL}/api/auth/me`, {
+        withCredentials: true
+      });
+      setUser(response.data);
+    } catch (error) {
+      // No valid session
+      setUser(null);
+    }
+  };
+
+  const loginWithGoogle = () => {
+    // Redirect URL is your app's main route (dashboard)
+    const redirectUrl = Linking.createURL('/(tabs)/dashboard');
+    const authUrl = `${AUTH_URL}/?redirect=${encodeURIComponent(redirectUrl)}`;
+    
+    // Open auth URL in browser
+    Linking.openURL(authUrl);
   };
 
   const logout = async () => {
-    await AsyncStorage.removeItem('user');
-    setUser(null);
+    try {
+      await axios.post(`${BACKEND_URL}/api/auth/logout`, {}, {
+        withCredentials: true
+      });
+      setUser(null);
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
   };
 
-  const updatePremiumStatus = async (isPremium: boolean) => {
+  const updatePremiumStatus = (isPremium: boolean) => {
     if (user) {
-      const updatedUser = { ...user, isPremium };
-      await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
-      setUser(updatedUser);
+      setUser({ ...user, isPremium });
     }
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, updatePremiumStatus }}>
+    <AuthContext.Provider value={{ user, loading, loginWithGoogle, logout, updatePremiumStatus }}>
       {children}
     </AuthContext.Provider>
   );

@@ -12,7 +12,7 @@ import os
 from datetime import datetime
 
 # Configuration
-BACKEND_URL = "https://speak-assess-2.preview.emergentagent.com/api"
+BACKEND_URL = "https://voiceassess-1.preview.emergentagent.com/api"
 TEST_USER_ID = "test_user_voice_assessment_2024"
 
 def create_mock_audio_base64():

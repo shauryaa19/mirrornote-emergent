@@ -12,6 +12,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
+import * as FileSystem from 'expo-file-system/legacy';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from './constants/theme';
 
 const { width } = Dimensions.get('window');
@@ -48,7 +49,7 @@ export default function RecordingScreen() {
   const [recordingTime, setRecordingTime] = useState(0);
   const [audioUri, setAudioUri] = useState<string | null>(null);
   const [permissionGranted, setPermissionGranted] = useState(false);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     requestPermissions();
@@ -120,7 +121,21 @@ export default function RecordingScreen() {
       setIsRecording(false);
       await recording.stopAndUnloadAsync();
       const uri = recording.getURI();
-      setAudioUri(uri);
+      // Persist the recording to a stable cache path so it survives reloads
+      if (uri) {
+        const recordingsDir = FileSystem.cacheDirectory + 'recordings';
+        const dirInfo = await FileSystem.getInfoAsync(recordingsDir);
+        if (!dirInfo.exists) {
+          await FileSystem.makeDirectoryAsync(recordingsDir, { intermediates: true });
+        }
+
+        const fileName = `recording-${Date.now()}.m4a`;
+        const targetPath = `${recordingsDir}/${fileName}`;
+        await FileSystem.copyAsync({ from: uri, to: targetPath });
+        setAudioUri(targetPath);
+      } else {
+        setAudioUri(null);
+      }
       setRecording(null);
     } catch (error) {
       console.error('Failed to stop recording', error);

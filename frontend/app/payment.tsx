@@ -10,8 +10,12 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import RazorpayCheckout from 'react-native-razorpay';
+import axios from 'axios';
 import { useAuth } from './context/AuthContext';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from './constants/theme';
+
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
 export default function PaymentScreen() {
   const router = useRouter();
@@ -35,25 +39,67 @@ export default function PaymentScreen() {
   const handlePayment = async () => {
     setProcessing(true);
 
-    // Mock Razorpay payment - in production, integrate actual Razorpay
-    setTimeout(() => {
-      setProcessing(false);
-      
-      // Mock successful payment
-      Alert.alert(
-        'Payment Successful! 🎉',
-        'You now have premium access to all features.',
-        [
-          {
-            text: 'Continue',
-            onPress: async () => {
-              await updatePremiumStatus(true);
-              router.replace('/(tabs)/dashboard');
-            },
-          },
-        ]
+    try {
+      // Create order on backend
+      const orderResponse = await axios.post(
+        `${BACKEND_URL}/api/payment/create-order`,
+        { plan_type: selectedPlan },
+        { withCredentials: true }
       );
-    }, 2000);
+
+      const { order_id, amount, currency, key_id } = orderResponse.data;
+
+      // Open Razorpay checkout
+      const options = {
+        description: `The Mirror Note ${selectedPlan === 'monthly' ? 'Monthly' : 'Yearly'} Subscription`,
+        image: 'https://your-logo-url.com/logo.png',
+        currency: currency,
+        key: key_id,
+        amount: amount,
+        name: 'The Mirror Note',
+        order_id: order_id,
+        prefill: {
+          email: 'user@example.com',
+          name: 'User Name',
+        },
+        theme: { color: '#8A9A5B' }
+      };
+
+      const data = await RazorpayCheckout.open(options);
+
+      // Payment successful, verify on backend
+      const verifyResponse = await axios.post(
+        `${BACKEND_URL}/api/payment/verify`,
+        {
+          order_id: data.razorpay_order_id,
+          payment_id: data.razorpay_payment_id,
+          signature: data.razorpay_signature,
+        },
+        { withCredentials: true }
+      );
+
+      if (verifyResponse.data.status === 'success') {
+        updatePremiumStatus(true);
+        Alert.alert(
+          'Payment Successful! 🎉',
+          'You now have premium access to all features.',
+          [
+            {
+              text: 'Continue',
+              onPress: () => router.replace('/(tabs)/dashboard'),
+            },
+          ]
+        );
+      }
+    } catch (error: any) {
+      console.error('Payment error:', error);
+      Alert.alert(
+        'Payment Failed',
+        error.response?.data?.detail || error.message || 'Something went wrong'
+      );
+    } finally {
+      setProcessing(false);
+    }
   };
 
   return (
