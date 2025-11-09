@@ -1,101 +1,31 @@
-import { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Alert,
-} from 'react-native';
-import { useRouter } from 'expo-router';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../constants/theme';
 
 export default function LoginScreen() {
-  const [email, setEmail] = useState('');
-  const [name, setName] = useState('');
-  const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
-  const router = useRouter();
-
-  const handleLogin = async () => {
-    if (!email || !name) {
-      Alert.alert('Error', 'Please enter both email and name');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      await login(email, name);
-      router.replace('/(tabs)/dashboard');
-    } catch (error) {
-      Alert.alert('Error', 'Failed to login. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { loginWithGoogle } = useAuth();
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={styles.header}>
-          <Text style={styles.logo}>🎤</Text>
-          <Text style={styles.title}>Welcome to</Text>
-          <Text style={styles.appName}>The Mirror Note</Text>
-          <Text style={styles.tagline}>Discover Your Voice, Elevate Your Communication</Text>
-        </View>
+    <SafeAreaView style={styles.container}>
+      <View style={styles.content}>
+        <Text style={styles.logo}>🎤</Text>
+        <Text style={styles.title}>Welcome to</Text>
+        <Text style={styles.appName}>The Mirror Note</Text>
+        <Text style={styles.tagline}>
+          Discover Your Voice, Elevate Your Communication
+        </Text>
 
-        <View style={styles.form}>
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Name</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter your name"
-              placeholderTextColor={COLORS.textLight}
-              value={name}
-              onChangeText={setName}
-              autoCapitalize="words"
-            />
-          </View>
+        <TouchableOpacity style={styles.googleButton} onPress={loginWithGoogle}>
+          <Ionicons name="logo-google" size={24} color={COLORS.textWhite} />
+          <Text style={styles.googleButtonText}>Continue with Google</Text>
+        </TouchableOpacity>
 
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter your email"
-              placeholderTextColor={COLORS.textLight}
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-          </View>
-
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleLogin}
-            disabled={loading}
-          >
-            <Text style={styles.buttonText}>
-              {loading ? 'Signing in...' : 'Get Started'}
-            </Text>
-          </TouchableOpacity>
-
-          <Text style={styles.note}>
-            Note: This is a demo. Google Sign-In can be integrated with Supabase Auth in production.
-          </Text>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        <Text style={styles.note}>
+          Secure authentication powered by Google OAuth
+        </Text>
+      </View>
+    </SafeAreaView>
   );
 }
 
@@ -104,18 +34,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
-  scrollContent: {
-    flexGrow: 1,
-    paddingHorizontal: SPACING.xl,
-    paddingVertical: SPACING.xxl,
-  },
-  header: {
+  content: {
+    flex: 1,
     alignItems: 'center',
-    marginTop: SPACING.xxl,
-    marginBottom: SPACING.xxl,
+    justifyContent: 'center',
+    paddingHorizontal: SPACING.xl,
   },
   logo: {
-    fontSize: 80,
+    fontSize: 100,
     marginBottom: SPACING.lg,
   },
   title: {
@@ -124,50 +50,33 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xs,
   },
   appName: {
-    fontSize: FONT_SIZES.xxl,
+    fontSize: FONT_SIZES.xxxl,
     fontWeight: 'bold',
     color: COLORS.primary,
-    marginBottom: SPACING.sm,
+    marginBottom: SPACING.md,
   },
   tagline: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: FONT_SIZES.md,
     color: COLORS.textLight,
     textAlign: 'center',
     paddingHorizontal: SPACING.lg,
+    marginBottom: SPACING.xxl,
   },
-  form: {
-    width: '100%',
-  },
-  inputContainer: {
-    marginBottom: SPACING.lg,
-  },
-  label: {
-    fontSize: FONT_SIZES.sm,
-    fontWeight: '600',
-    color: COLORS.text,
-    marginBottom: SPACING.sm,
-  },
-  input: {
-    backgroundColor: COLORS.backgroundDark,
-    borderRadius: BORDER_RADIUS.md,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.md,
-    fontSize: FONT_SIZES.md,
-    color: COLORS.text,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  button: {
-    backgroundColor: COLORS.primary,
-    borderRadius: BORDER_RADIUS.md,
-    paddingVertical: SPACING.md,
+  googleButton: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: SPACING.md,
+    backgroundColor: COLORS.primary,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.xl,
+    borderRadius: BORDER_RADIUS.md,
+    gap: SPACING.md,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
   },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonText: {
+  googleButtonText: {
     color: COLORS.textWhite,
     fontSize: FONT_SIZES.lg,
     fontWeight: 'bold',
