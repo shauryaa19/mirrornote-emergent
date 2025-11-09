@@ -226,17 +226,29 @@ frontend:
         agent: "main"
         comment: "Comprehensive results display: overall score, voice archetype, clarity/confidence scores, WPM, pitch analysis, filler words breakdown with charts, strengths/improvements lists, training questions (3-5 free, rest locked)."
 
-  - task: "Payment Screen (Mocked)"
+  - task: "Payment & Subscription Backend"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/payment.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Updated payment service for Standard plan (₹499/month). Endpoints: /api/payment/create-order, /api/payment/verify, /api/payment/webhook. Razorpay integration ready (needs keys). Updates subscription & premium status in MongoDB."
+
+  - task: "Payment Screen Frontend"
     implemented: true
     working: "NA"
     file: "/app/frontend/app/payment.tsx"
     stuck_count: 0
     priority: "medium"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
-        comment: "Created payment UI with monthly (₹499) and yearly (₹3,999) plans. Mocked Razorpay integration with success flow. Updates user premium status on mock payment."
+        comment: "Needs update to show new plan structure: Free (5 assessments) vs Standard (₹499/month - 30 assessments). Currently shows old pricing."
 
   - task: "Theme & Design System"
     implemented: true
