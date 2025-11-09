@@ -167,7 +167,7 @@ async def analyze_voice(request_data: VoiceAnalysisRequest, request: Request):
         # For MVP, we'll process immediately
         try:
             # Decode base64 audio
-            audio_bytes = base64.b64decode(request.audio_base64)
+            audio_bytes = base64.b64decode(request_data.audio_base64)
 
             # Save temporarily to a cross-platform temp directory
             temp_dir = tempfile.gettempdir()
