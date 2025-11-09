@@ -27,8 +27,14 @@ mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
-# OpenAI client - configured for Emergent LLM
-openai_client = OpenAI(
+# OpenAI clients
+# For Whisper (audio transcription) - use direct OpenAI API
+openai_audio_client = OpenAI(
+    api_key=os.environ['OPENAI_API_KEY']
+)
+
+# For GPT-4 (text analysis) - use Emergent LLM via Kindo.ai
+openai_text_client = OpenAI(
     api_key=os.environ['OPENAI_API_KEY'],
     base_url="https://llm.kindo.ai/v1"
 )
