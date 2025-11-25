@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,36 +6,85 @@ import {
   TouchableOpacity,
   ScrollView,
   SafeAreaView,
+  RefreshControl,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../constants/theme';
+
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
 export default function DashboardScreen() {
   const { user } = useAuth();
   const router = useRouter();
+  const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState({
     totalAssessments: 0,
     avgScore: 0,
-    lastAssessment: null,
+    bestScore: 0,
   });
+
+  const fetchStats = async () => {
+    try {
+      const response = await axios.get(`${BACKEND_URL}/api/assessments`);
+      const assessments = response.data.assessments || [];
+
+      if (assessments.length > 0) {
+        const scores = assessments.map((a: any) =>
+          a.analysis.insights?.overall_score || a.analysis.overall_score || 0
+        );
+
+        const total = scores.length;
+        const sum = scores.reduce((a: number, b: number) => a + b, 0);
+        const avg = Math.round(sum / total);
+        const best = Math.max(...scores);
+
+        setStats({
+          totalAssessments: total,
+          avgScore: avg,
+          bestScore: best,
+        });
+      } else {
+        setStats({
+          totalAssessments: 0,
+          avgScore: 0,
+          bestScore: 0,
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchStats();
+    }, [])
+  );
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchStats();
+  }, []);
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />
+        }
+      >
         {/* Header */}
         <View style={styles.header}>
           <View>
             <Text style={styles.greeting}>Hello, {user?.name?.split(' ')[0] || 'User'}!</Text>
             <Text style={styles.subtitle}>Ready to assess your voice?</Text>
           </View>
-          {user?.isPremium && (
-            <View style={styles.premiumBadge}>
-              <Ionicons name="star" size={16} color={COLORS.textWhite} />
-              <Text style={styles.premiumText}>Premium</Text>
-            </View>
-          )}
         </View>
 
         {/* Start Assessment Button */}
@@ -73,7 +122,9 @@ export default function DashboardScreen() {
             </View>
             <View style={styles.statCard}>
               <Ionicons name="trophy-outline" size={32} color={COLORS.warning} />
-              <Text style={styles.statValue}>--</Text>
+              <Text style={styles.statValue}>
+                {stats.bestScore > 0 ? stats.bestScore : '--'}
+              </Text>
               <Text style={styles.statLabel}>Best Score</Text>
             </View>
           </View>
@@ -140,20 +191,6 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.md,
     color: COLORS.textLight,
     marginTop: SPACING.xs,
-  },
-  premiumBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    borderRadius: BORDER_RADIUS.round,
-    gap: 4,
-  },
-  premiumText: {
-    color: COLORS.textWhite,
-    fontSize: FONT_SIZES.xs,
-    fontWeight: 'bold',
   },
   startButton: {
     backgroundColor: COLORS.background,

@@ -37,28 +37,9 @@ export default function ProfileScreen() {
           </View>
           <Text style={styles.name}>{user?.name}</Text>
           <Text style={styles.email}>{user?.email}</Text>
-          {user?.isPremium && (
-            <View style={styles.premiumBadge}>
-              <Ionicons name="star" size={16} color={COLORS.textWhite} />
-              <Text style={styles.premiumText}>Premium Member</Text>
-            </View>
-          )}
         </View>
 
         <View style={styles.menuContainer}>
-          {!user?.isPremium && (
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => router.push('/payment')}
-            >
-              <View style={styles.menuItemLeft}>
-                <Ionicons name="star-outline" size={24} color={COLORS.primary} />
-                <Text style={styles.menuItemText}>Upgrade to Premium</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={COLORS.textLight} />
-            </TouchableOpacity>
-          )}
-
           <TouchableOpacity style={styles.menuItem}>
             <View style={styles.menuItemLeft}>
               <Ionicons name="help-circle-outline" size={24} color={COLORS.textLight} />
@@ -136,21 +117,6 @@ const styles = StyleSheet.create({
   email: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.textLight,
-  },
-  premiumBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
-    borderRadius: BORDER_RADIUS.round,
-    gap: 4,
-    marginTop: SPACING.md,
-  },
-  premiumText: {
-    color: COLORS.textWhite,
-    fontSize: FONT_SIZES.sm,
-    fontWeight: 'bold',
   },
   menuContainer: {
     backgroundColor: COLORS.background,

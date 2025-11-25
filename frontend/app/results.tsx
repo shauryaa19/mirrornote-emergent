@@ -92,10 +92,6 @@ export default function ResultsScreen() {
     }
   };
 
-  const handleUpgrade = () => {
-    router.push('/payment');
-  };
-
   const handleDone = () => {
     router.replace('/(tabs)/dashboard');
   };
@@ -126,9 +122,9 @@ export default function ResultsScreen() {
   }
 
   const { analysis, training_questions } = assessment;
-  const freeQuestions = training_questions?.filter(q => q.is_free) || [];
-  const lockedQuestions = training_questions?.filter(q => !q.is_free) || [];
-  
+  // All questions are now free
+  const questions = training_questions || [];
+
   // Extract values with fallbacks for backward compatibility
   const overallScore = analysis.insights?.overall_score || analysis.overall_score || 75;
   const archetype = analysis.insights?.voice_personality || analysis.archetype || 'Emerging Communicator';
@@ -276,14 +272,14 @@ export default function ResultsScreen() {
           </View>
         )}
 
-        {/* Training Questions - Free */}
-        {freeQuestions.length > 0 && (
+        {/* Training Questions - All Free */}
+        {questions.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>
               <Ionicons name="school" size={20} color={COLORS.primary} /> Training
-              Questions (Free)
+              Questions
             </Text>
-            {freeQuestions.map((q, index) => (
+            {questions.map((q, index) => (
               <View key={index} style={styles.questionCard}>
                 <View style={styles.questionHeader}>
                   <Ionicons name="help-circle" size={20} color={COLORS.primary} />
@@ -296,49 +292,6 @@ export default function ResultsScreen() {
                 </View>
               </View>
             ))}
-          </View>
-        )}
-
-        {/* Upgrade CTA */}
-        {lockedQuestions.length > 0 && !user?.isPremium && (
-          <View style={styles.section}>
-            <View style={styles.upgradeCard}>
-              <Ionicons name="lock-closed" size={48} color={COLORS.primary} />
-              <Text style={styles.upgradeTitle}>
-                Unlock Full Training Program
-              </Text>
-              <Text style={styles.upgradeDescription}>
-                Get access to {lockedQuestions.length} more personalized training
-                questions, unlimited assessments, and progress tracking.
-              </Text>
-              <View style={styles.upgradeFeatures}>
-                <View style={styles.upgradeFeature}>
-                  <Ionicons name="checkmark" size={16} color={COLORS.success} />
-                  <Text style={styles.upgradeFeatureText}>
-                    Complete training program
-                  </Text>
-                </View>
-                <View style={styles.upgradeFeature}>
-                  <Ionicons name="checkmark" size={16} color={COLORS.success} />
-                  <Text style={styles.upgradeFeatureText}>
-                    Unlimited assessments
-                  </Text>
-                </View>
-                <View style={styles.upgradeFeature}>
-                  <Ionicons name="checkmark" size={16} color={COLORS.success} />
-                  <Text style={styles.upgradeFeatureText}>Progress tracking</Text>
-                </View>
-              </View>
-              <TouchableOpacity
-                style={styles.upgradeButton}
-                onPress={handleUpgrade}
-              >
-                <Text style={styles.upgradeButtonText}>
-                  Upgrade to Premium
-                </Text>
-                <Ionicons name="arrow-forward" size={20} color={COLORS.textWhite} />
-              </TouchableOpacity>
-            </View>
           </View>
         )}
 
@@ -423,7 +376,7 @@ const styles = StyleSheet.create({
   scoreCard: {
     backgroundColor: COLORS.background,
     marginHorizontal: SPACING.lg,
-    marginTop: SPACING.lg,
+    marginVertical: SPACING.lg,
     borderRadius: BORDER_RADIUS.lg,
     padding: SPACING.xl,
     alignItems: 'center',
@@ -619,62 +572,6 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     color: COLORS.text,
     lineHeight: 20,
-  },
-  upgradeCard: {
-    backgroundColor: COLORS.background,
-    borderRadius: BORDER_RADIUS.lg,
-    padding: SPACING.xl,
-    alignItems: 'center',
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 8,
-    borderWidth: 2,
-    borderColor: COLORS.primary,
-  },
-  upgradeTitle: {
-    fontSize: FONT_SIZES.xl,
-    fontWeight: 'bold',
-    color: COLORS.text,
-    marginTop: SPACING.md,
-    marginBottom: SPACING.sm,
-    textAlign: 'center',
-  },
-  upgradeDescription: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textLight,
-    textAlign: 'center',
-    marginBottom: SPACING.lg,
-    lineHeight: 20,
-  },
-  upgradeFeatures: {
-    alignSelf: 'stretch',
-    marginBottom: SPACING.lg,
-  },
-  upgradeFeature: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.sm,
-    marginBottom: SPACING.sm,
-  },
-  upgradeFeatureText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.text,
-  },
-  upgradeButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: SPACING.xl,
-    paddingVertical: SPACING.md,
-    borderRadius: BORDER_RADIUS.md,
-    gap: SPACING.sm,
-  },
-  upgradeButtonText: {
-    color: COLORS.textWhite,
-    fontSize: FONT_SIZES.md,
-    fontWeight: 'bold',
   },
   actionsContainer: {
     flexDirection: 'row',

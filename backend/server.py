@@ -15,7 +15,6 @@ import re
 import json
 from openai import OpenAI
 from auth import AuthService
-from payment import PaymentService
 from usage import UsageService
 import audio_utils
 import vad
@@ -23,6 +22,10 @@ import feature_extractor
 import insights_generator
 import prompt_builder
 
+# Rate limiting
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -45,11 +48,15 @@ openai_text_client = OpenAI(
 
 # Initialize services
 auth_service = AuthService(db)
-payment_service = PaymentService(db)
 usage_service = UsageService(db)
+
+# Initialize Rate Limiter
+limiter = Limiter(key_func=get_remote_address)
 
 # Create the main app without a prefix
 app = FastAPI()
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
@@ -102,13 +109,15 @@ async def get_status_checks():
 
 # ============ AUTH ENDPOINTS ============
 @api_router.post("/auth/session")
-async def create_session(request_data: SessionRequest, response: Response):
+@limiter.limit("10/minute")
+async def create_session(request: Request, request_data: SessionRequest, response: Response):
     """
     Exchange session_id from URL for session_token
     """
     return await auth_service.process_session_id(request_data.session_id, response)
 
 @api_router.get("/auth/me")
+@limiter.limit("60/minute")
 async def get_me(request: Request):
     """
     Get current authenticated user
@@ -122,31 +131,6 @@ async def logout(request: Request, response: Response):
     """
     return await auth_service.logout(request, response)
 
-# ============ PAYMENT ENDPOINTS ============
-@api_router.post("/payment/create-order")
-async def create_payment_order(plan_type: str, request: Request):
-    """
-    Create Razorpay order for subscription
-    """
-    user = await auth_service.get_current_user(request)
-    return await payment_service.create_subscription_order(user["id"], plan_type)
-
-@api_router.post("/payment/verify")
-async def verify_payment(payment_data: dict, request: Request):
-    """
-    Verify Razorpay payment
-    """
-    # Ensure user is authenticated
-    await auth_service.get_current_user(request)
-    return await payment_service.verify_payment(payment_data)
-
-@api_router.post("/payment/webhook")
-async def payment_webhook(request: Request):
-    """
-    Handle Razorpay webhooks
-    """
-    return await payment_service.handle_webhook(request)
-
 # ============ USAGE ENDPOINTS ============
 @api_router.get("/usage")
 async def get_usage(request: Request):
@@ -158,7 +142,8 @@ async def get_usage(request: Request):
 
 # ============ VOICE ANALYSIS ENDPOINTS ============
 @api_router.post("/analyze-voice", response_model=VoiceAnalysisResponse)
-async def analyze_voice(request_data: VoiceAnalysisRequest, request: Request):
+@limiter.limit("5/minute")
+async def analyze_voice(request: Request, request_data: VoiceAnalysisRequest):
     """
     Analyzes voice recording using OpenAI Whisper and GPT-4
     """
@@ -166,17 +151,6 @@ async def analyze_voice(request_data: VoiceAnalysisRequest, request: Request):
         # Get authenticated user (required for usage tracking)
         user = await auth_service.get_current_user(request)
         user_id = user["id"]
-        
-        # Check usage limits
-        usage_check = await usage_service.check_can_create_assessment(user_id)
-        if not usage_check["allowed"]:
-            raise HTTPException(
-                status_code=403, 
-                detail={
-                    "message": usage_check["reason"],
-                    "usage": usage_check["usage"]
-                }
-            )
         
         # Create assessment record
         assessment_id = str(uuid.uuid4())
@@ -374,7 +348,8 @@ async def analyze_voice(request_data: VoiceAnalysisRequest, request: Request):
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 @api_router.get("/assessment/{assessment_id}")
-async def get_assessment(assessment_id: str, request: Request):
+@limiter.limit("30/minute")
+async def get_assessment(request: Request, assessment_id: str):
     """
     Get assessment results
     """
@@ -401,6 +376,7 @@ async def get_assessment(assessment_id: str, request: Request):
     return assessment
 
 @api_router.get("/assessments")
+@limiter.limit("20/minute")
 async def get_assessments(request: Request, limit: int = 10, skip: int = 0):
     """
     Get user's assessment history
@@ -558,7 +534,7 @@ Format as JSON array with this structure:
   {{
     "question": "string",
     "answer": "string",
-    "is_free": boolean (first 3 are true, rest false)
+    "is_free": boolean (always true)
   }}
 ]
 """
@@ -576,9 +552,9 @@ Format as JSON array with this structure:
         result = json.loads(response.choices[0].message.content)
         questions = result.get("questions", [])
         
-        # Ensure first 3 are marked as free
-        for i, q in enumerate(questions):
-            q["is_free"] = i < 3
+        # Ensure all are marked as free
+        for q in questions:
+            q["is_free"] = True
         
         return questions[:10]
         

@@ -86,7 +86,6 @@ class AuthService:
                     "email": existing_user["email"],
                     "name": existing_user["name"],
                     "picture": existing_user.get("picture"),
-                    "isPremium": existing_user.get("isPremium", False),
                     "session_token": session_token
                 }
         
@@ -102,7 +101,6 @@ class AuthService:
                     "email": user_data["email"],
                     "name": user_data["name"],
                     "picture": user_data.get("picture"),
-                    "isPremium": False,
                     "created_at": datetime.now(timezone.utc)
                 }
                 await self.db.users.insert_one(user_doc)
@@ -161,7 +159,6 @@ class AuthService:
             "email": user_data["email"],
             "name": user_data["name"],
             "picture": user_data.get("picture"),
-            "isPremium": existing_user.get("isPremium", False) if existing_user else False,
             "session_token": session_token  # Include token in response for React Native
         }
     
