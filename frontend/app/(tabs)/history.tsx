@@ -41,10 +41,11 @@ export default function HistoryScreen() {
   const fetchAssessments = async () => {
     try {
       const response = await axios.get(`${BACKEND_URL}/api/assessments`);
+      const assessments = response.data.assessments || response.data || [];
       // Sort by date descending (newest first)
-      const sorted = response.data.sort((a: Assessment, b: Assessment) => 
+      const sorted = Array.isArray(assessments) ? assessments.sort((a: Assessment, b: Assessment) => 
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      );
+      ) : [];
       setAssessments(sorted);
     } catch (error) {
       console.error('Error fetching assessments:', error);
@@ -81,8 +82,8 @@ export default function HistoryScreen() {
   };
 
   const renderItem = ({ item }: { item: Assessment }) => {
-    const score = item.analysis.insights?.overall_score || item.analysis.overall_score || 0;
-    const archetype = item.analysis.insights?.voice_personality || item.analysis.archetype || 'Assessment';
+    const score = item.analysis?.insights?.overall_score || item.analysis?.overall_score || 0;
+    const archetype = item.analysis?.insights?.voice_personality || item.analysis?.archetype || 'Assessment';
 
     return (
       <TouchableOpacity 

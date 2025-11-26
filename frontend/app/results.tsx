@@ -126,18 +126,18 @@ export default function ResultsScreen() {
   const questions = training_questions || [];
 
   // Extract values with fallbacks for backward compatibility
-  const overallScore = analysis.insights?.overall_score || analysis.overall_score || 75;
-  const archetype = analysis.insights?.voice_personality || analysis.archetype || 'Emerging Communicator';
-  const tone = analysis.insights?.tone_description || analysis.tone || 'Balanced';
-  const clarityScore = analysis.insights?.clarity_score || analysis.clarity_score || 75;
-  const confidenceScore = analysis.insights?.confidence_score || analysis.confidence_score || 70;
-  const speakingPace = analysis.metrics?.speaking_pace || analysis.speaking_pace || 0;
-  const pitchAvg = analysis.pitch_avg || 0;
-  const pitchRange = analysis.pitch_range || 'Medium';
-  const fillerWords = analysis.filler_words || {};
-  const fillerCount = analysis.filler_count || 0;
-  const strengths = analysis.insights?.what_went_well || analysis.strengths || [];
-  const improvements = analysis.insights?.growth_opportunities || analysis.improvements || [];
+  const overallScore = analysis?.insights?.overall_score || analysis?.overall_score || 75;
+  const archetype = analysis?.insights?.voice_personality || analysis?.archetype || 'Emerging Communicator';
+  const tone = analysis?.insights?.tone_description || analysis?.tone || 'Balanced';
+  const clarityScore = analysis?.insights?.clarity_score || analysis?.clarity_score || 75;
+  const confidenceScore = analysis?.insights?.confidence_score || analysis?.confidence_score || 70;
+  const speakingPace = analysis?.metrics?.speaking_pace || analysis?.speaking_pace || 0;
+  const pitchAvg = analysis?.pitch_avg || 0;
+  const pitchRange = analysis?.pitch_range || 'Medium';
+  const fillerWords = analysis?.filler_words || {};
+  const fillerCount = analysis?.filler_count || 0;
+  const strengths = analysis?.insights?.what_went_well || analysis?.strengths || [];
+  const improvements = analysis?.insights?.growth_opportunities || analysis?.improvements || [];
 
   return (
     <SafeAreaView style={styles.container}>
@@ -301,7 +301,7 @@ export default function ResultsScreen() {
             style={styles.secondaryButton}
             onPress={() => router.push('/recording')}
           >
-            <Ionicons name="mic" size={20} color={COLORS.primary} />
+            {/* <Ionicons name="mic" size={20} color={COLORS.primary} /> */}
             <Text style={styles.secondaryButtonText}>New Assessment</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.primaryButton} onPress={handleDone}>

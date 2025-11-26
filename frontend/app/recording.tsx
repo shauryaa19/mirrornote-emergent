@@ -4,21 +4,26 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
   Alert,
   ScrollView,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system/legacy';
+import axios from 'axios';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from './constants/theme';
+import { useAuth } from './context/AuthContext';
 
 const { width } = Dimensions.get('window');
 const MAX_RECORDING_DURATION = 120000; // 2 minutes in milliseconds
 
-// Sample texts for guided mode
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
+
+// Sample texts for guided mode (fallback)
 const SAMPLE_TEXTS = [
   {
     id: 1,
@@ -42,8 +47,11 @@ const SAMPLE_TEXTS = [
 
 export default function RecordingScreen() {
   const router = useRouter();
+  const { user } = useAuth();
+  const insets = useSafeAreaInsets();
   const [mode, setMode] = useState<'free' | 'guided' | null>(null);
   const [selectedText, setSelectedText] = useState(SAMPLE_TEXTS[0]);
+  const [loadingNewText, setLoadingNewText] = useState(false);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
@@ -177,6 +185,38 @@ export default function RecordingScreen() {
     setRecordingTime(0);
   };
 
+  const fetchNewText = async () => {
+    if (!BACKEND_URL) {
+      Alert.alert('Error', 'Backend URL not configured');
+      return;
+    }
+
+    setLoadingNewText(true);
+    try {
+      const response = await axios.post(
+        `${BACKEND_URL}/api/generate-guided-text`,
+        { category: selectedText.category }
+      );
+
+      if (response.data) {
+        setSelectedText({
+          id: Date.now(), // Generate a new ID
+          title: response.data.title,
+          category: response.data.category,
+          content: response.data.content,
+        });
+      }
+    } catch (error: any) {
+      console.error('Error fetching new text:', error);
+      Alert.alert(
+        'Error',
+        error.response?.data?.detail || 'Failed to generate new text. Please try again.'
+      );
+    } finally {
+      setLoadingNewText(false);
+    }
+  };
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -194,7 +234,13 @@ export default function RecordingScreen() {
           <Text style={styles.headerTitle}>Choose Recording Mode</Text>
         </View>
 
-        <ScrollView contentContainerStyle={styles.modeSelection}>
+        <ScrollView 
+          contentContainerStyle={[
+            styles.modeSelection,
+            { paddingBottom: insets.bottom + SPACING.lg }
+          ]}
+          showsVerticalScrollIndicator={false}
+        >
           <TouchableOpacity
             style={styles.modeCard}
             onPress={() => setMode('free')}
@@ -246,7 +292,13 @@ export default function RecordingScreen() {
         </Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.recordingContent}>
+      <ScrollView 
+        contentContainerStyle={[
+          styles.recordingContent,
+          { paddingBottom: insets.bottom + SPACING.lg }
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
         {mode === 'guided' && (
           <View style={styles.textCard}>
             <Text style={styles.textCategory}>{selectedText.category}</Text>
@@ -254,8 +306,16 @@ export default function RecordingScreen() {
             <ScrollView style={styles.textScrollView}>
               <Text style={styles.textContent}>{selectedText.content}</Text>
             </ScrollView>
-            <TouchableOpacity style={styles.changeTextButton}>
-              <Text style={styles.changeTextButtonText}>Change Text</Text>
+            <TouchableOpacity 
+              style={styles.changeTextButton}
+              onPress={fetchNewText}
+              disabled={loadingNewText}
+            >
+              {loadingNewText ? (
+                <ActivityIndicator size="small" color={COLORS.primary} />
+              ) : (
+                <Text style={styles.changeTextButtonText}>Change Text</Text>
+              )}
             </TouchableOpacity>
           </View>
         )}
@@ -389,6 +449,7 @@ const styles = StyleSheet.create({
   modeSelection: {
     padding: SPACING.lg,
     gap: SPACING.lg,
+    flexGrow: 1,
   },
   modeCard: {
     backgroundColor: COLORS.background,
@@ -439,6 +500,7 @@ const styles = StyleSheet.create({
   recordingContent: {
     padding: SPACING.lg,
     gap: SPACING.lg,
+    flexGrow: 1,
   },
   textCard: {
     backgroundColor: COLORS.background,

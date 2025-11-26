@@ -33,7 +33,7 @@ export default function DashboardScreen() {
 
       if (assessments.length > 0) {
         const scores = assessments.map((a: any) =>
-          a.analysis.insights?.overall_score || a.analysis.overall_score || 0
+          a.analysis?.insights?.overall_score || a.analysis?.overall_score || 0
         );
 
         const total = scores.length;

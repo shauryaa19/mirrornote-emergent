@@ -34,6 +34,7 @@ axios.interceptors.request.use(
       }
       config.headers.Authorization = `Bearer ${token}`;
     }
+    console.log(`[API Request] ${config.method?.toUpperCase()} ${config.url}`);
     return config;
   },
   (error) => {
@@ -45,6 +46,7 @@ axios.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response) {
+      console.log(`[API Error] ${error.response.status} ${error.config.url}`, error.response.data);
       // Handle Rate Limiting
       if (error.response.status === 429) {
         Alert.alert(
@@ -58,17 +60,25 @@ axios.interceptors.response.use(
         console.log("Session expired or unauthorized");
       }
     } else if (error.request) {
+      console.log(`[API Error] Network Error ${error.config?.url}`, error.message);
       // Network error
       Alert.alert(
         "Network Error",
         "Please check your internet connection."
       );
+    } else {
+      console.log(`[API Error] Request Setup Error`, error.message);
     }
     return Promise.reject(error);
   }
 );
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  // Log backend URL on mount to verify environment
+  useEffect(() => {
+    console.log('[Config] BACKEND_URL:', BACKEND_URL);
+  }, []);
+
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const processingRef = useRef<string | null>(null);

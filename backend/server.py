@@ -90,6 +90,14 @@ class AssessmentStatus(BaseModel):
 class SessionRequest(BaseModel):
     session_id: str
 
+class GuidedTextRequest(BaseModel):
+    category: Optional[str] = None  # Optional category filter
+
+class GuidedTextResponse(BaseModel):
+    title: str
+    category: str
+    content: str
+
 # Add your routes to the router instead of directly to app
 @api_router.get("/")
 async def root():
@@ -139,6 +147,81 @@ async def get_usage(request: Request):
     """
     user = await auth_service.get_current_user(request)
     return await usage_service.get_user_usage(user["id"])
+
+# ============ GUIDED SPEAKING TEXT ENDPOINTS ============
+@api_router.post("/generate-guided-text", response_model=GuidedTextResponse)
+@limiter.limit("10/minute")
+async def generate_guided_text(request: Request, request_data: GuidedTextRequest):
+    """
+    Generate a new guided speaking text using AI
+    """
+    try:
+        # Get authenticated user
+        user = await auth_service.get_current_user(request)
+        
+        # Categories for variety
+        categories = ["Professional", "Business", "Creative", "Educational", "Motivational", "Technical"]
+        selected_category = request_data.category or categories[len(str(uuid.uuid4())) % len(categories)]
+        
+        prompt = f"""Generate a practice text for voice assessment. The text should be:
+- Appropriate for reading aloud in 30-90 seconds
+- Clear and well-structured
+- Suitable for {selected_category} context
+- Between 50-150 words
+- Engaging and natural
+
+Return a JSON object with:
+{{
+  "title": "A descriptive title",
+  "category": "{selected_category}",
+  "content": "The full text content to read"
+}}"""
+
+        try:
+            response = openai_text_client.chat.completions.create(
+                model="gpt-4-turbo",
+                messages=[
+                    {"role": "system", "content": "You are an expert at creating practice texts for voice assessment and communication training."},
+                    {"role": "user", "content": prompt}
+                ],
+                response_format={"type": "json_object"}
+            )
+            
+            result = json.loads(response.choices[0].message.content)
+            
+            return GuidedTextResponse(
+                title=result.get("title", "Practice Text"),
+                category=result.get("category", selected_category),
+                content=result.get("content", "")
+            )
+            
+        except Exception as e:
+            logger.error(f"Error generating guided text: {str(e)}")
+            # Return a fallback text
+            fallback_texts = {
+                "Professional": {
+                    "title": "Professional Introduction",
+                    "category": "Professional",
+                    "content": "Hello, my name is Alex Johnson. I have over five years of experience in software development and project management. I specialize in building scalable web applications and leading cross-functional teams. I am passionate about using technology to solve real-world problems and deliver value to users."
+                },
+                "Business": {
+                    "title": "Product Pitch",
+                    "category": "Business",
+                    "content": "Our innovative platform revolutionizes how businesses manage their customer relationships. With AI-powered insights and seamless integration capabilities, we help companies increase customer satisfaction by up to forty percent while reducing operational costs. Join over five thousand companies already transforming their customer experience."
+                },
+                "Creative": {
+                    "title": "Storytelling",
+                    "category": "Creative",
+                    "content": "The sun was setting over the mountains, casting long shadows across the valley. Sarah stood at the edge of the cliff, her heart pounding with anticipation. This was the moment she had been waiting for, the culmination of months of preparation. With a deep breath, she took her first step forward into the unknown."
+                }
+            }
+            
+            fallback = fallback_texts.get(selected_category, fallback_texts["Professional"])
+            return GuidedTextResponse(**fallback)
+            
+    except Exception as e:
+        logger.error(f"Error in generate_guided_text endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate guided text: {str(e)}")
 
 # ============ VOICE ANALYSIS ENDPOINTS ============
 @api_router.post("/analyze-voice", response_model=VoiceAnalysisResponse)
