@@ -1,0 +1,12 @@
+{
+  "build": {
+    "builder": "NIXPACKS",
+    "watchPatterns": ["backend/**"],
+    "buildCommand": "cd backend && uv pip install -r requirements.txt --system"
+  },
+  "deploy": {
+    "startCommand": "cd backend && uv run uvicorn server:app --host 0.0.0.0 --port 8000",
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 3
+  }
+}
