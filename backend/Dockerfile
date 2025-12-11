@@ -18,4 +18,4 @@ RUN uv pip install -r requirements.txt --system
 EXPOSE 8000
 
 # Run server
-CMD ["sh", "-c", "cd backend && uv run uvicorn server:app --host 0.0.0.0 --port $PORT"]
+CMD ["sh", "-c", "uv run uvicorn server:app --host 0.0.0.0 --port $PORT"]
