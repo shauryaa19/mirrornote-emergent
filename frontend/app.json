@@ -7,7 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "mirrornote",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.yourcompany.mirrornote"
@@ -15,9 +15,15 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#000"
+        "backgroundColor": "#000000"
       },
       "package": "com.yourcompany.mirrornote",
+      "versionCode": 1,
+      "permissions": [
+        "RECORD_AUDIO",
+        "INTERNET",
+        "ACCESS_NETWORK_STATE"
+      ],
       "edgeToEdgeEnabled": true
     },
     "web": {
@@ -39,6 +45,11 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "14103ddc-e9c3-46fb-8eca-9d8c44cf1bc1"
+      }
     }
   }
 }
