@@ -1,7 +1,7 @@
 FROM python:3.12-slim
 
 # Install uv and other dependencies
-RUN apt-get update && apt-get install -y gcc g++ build-essential
+RUN apt-get update && apt-get install -y gcc g++ build-essential ffmpeg libsndfile1
 
 RUN pip install uv
 
