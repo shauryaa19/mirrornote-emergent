@@ -2,9 +2,25 @@
 Acoustic feature extraction: prosody, loudness, quality, and spectral features.
 """
 from typing import Dict, List
+import logging
 import numpy as np
 import librosa
-from scipy import stats
+
+logger = logging.getLogger(__name__)
+
+# Prosody thresholds (Hz)
+PITCH_HIGH_THRESHOLD = 200  # Above this is considered high pitch
+PITCH_LOW_THRESHOLD = 130   # Below this is considered low pitch
+PITCH_STD_HIGH = 45         # High vocal variety
+PITCH_STD_MEDIUM = 25       # Normal vocal variety
+
+# Loudness thresholds (dB)
+DYNAMIC_RANGE_HIGH = 15     # Very dynamic
+DYNAMIC_RANGE_MEDIUM = 8    # Normal dynamic range
+
+# Voice quality thresholds
+HNR_EXCELLENT = 15          # Excellent voice quality
+HNR_GOOD = 10               # Good voice quality
 
 
 def extract_prosody(audio: np.ndarray, sr: int) -> Dict:
@@ -32,6 +48,7 @@ def extract_prosody(audio: np.ndarray, sr: int) -> Dict:
         f0_voiced = f0[~np.isnan(f0)]
         
         if len(f0_voiced) == 0:
+            logger.warning("No voiced frames detected in audio")
             return {
                 "pitch_mean": 0,
                 "pitch_std": 0,
@@ -69,7 +86,7 @@ def extract_prosody(audio: np.ndarray, sr: int) -> Dict:
         }
         
     except Exception as e:
-        print(f"Prosody extraction failed: {e}")
+        logger.error(f"Prosody extraction failed: {e}")
         return {
             "pitch_mean": 0,
             "pitch_std": 0,
@@ -97,6 +114,7 @@ def extract_loudness(audio: np.ndarray, sr: int) -> Dict:
         rms = librosa.feature.rms(y=audio, frame_length=2048, hop_length=512)[0]
         
         if len(rms) == 0:
+            logger.warning("No RMS frames extracted from audio")
             return {
                 "rms_mean": 0,
                 "rms_std": 0,
@@ -127,7 +145,7 @@ def extract_loudness(audio: np.ndarray, sr: int) -> Dict:
         }
         
     except Exception as e:
-        print(f"Loudness extraction failed: {e}")
+        logger.error(f"Loudness extraction failed: {e}")
         return {
             "rms_mean": 0,
             "rms_std": 0,
@@ -138,15 +156,17 @@ def extract_loudness(audio: np.ndarray, sr: int) -> Dict:
 
 def extract_voice_quality_librosa(audio: np.ndarray, sr: int) -> Dict:
     """
-    Extract voice quality features using librosa (fallback when Parselmouth unavailable).
-    Estimates based on spectral features.
+    Extract voice quality features using librosa (proxy when Parselmouth unavailable).
+    
+    NOTE: These are approximations based on spectral features, not clinical measurements.
+    For accurate jitter/shimmer/HNR, use Parselmouth/Praat.
     
     Args:
         audio: Audio array
         sr: Sample rate
         
     Returns:
-        Dictionary of quality metrics
+        Dictionary of quality metrics (approximations)
     """
     try:
         # Spectral flatness (proxy for breathiness)
@@ -162,6 +182,7 @@ def extract_voice_quality_librosa(audio: np.ndarray, sr: int) -> Dict:
         rolloff_mean = float(np.mean(rolloff))
         
         # Estimate quality scores (normalized to typical ranges)
+        # These are APPROXIMATIONS - not clinical measurements
         jitter_proxy = min(zcr_mean * 10, 5.0)  # Normalized to ~0-5% range
         shimmer_proxy = min(flatness_mean * 20, 8.0)  # Normalized to ~0-8% range
         hnr_proxy = max(15 - (flatness_mean * 30), 5.0)  # Inverse relationship, 5-20 dB
@@ -170,16 +191,18 @@ def extract_voice_quality_librosa(audio: np.ndarray, sr: int) -> Dict:
             "jitter_local": round(jitter_proxy, 2),
             "shimmer_local": round(shimmer_proxy, 2),
             "hnr_mean": round(hnr_proxy, 2),
-            "method": "librosa_proxy"
+            "method": "librosa_proxy",  # Indicates these are approximations
+            "is_approximation": True
         }
         
     except Exception as e:
-        print(f"Quality extraction failed: {e}")
+        logger.error(f"Quality extraction failed: {e}")
         return {
             "jitter_local": 0,
             "shimmer_local": 0,
             "hnr_mean": 15.0,
-            "method": "fallback"
+            "method": "fallback",
+            "is_approximation": True
         }
 
 
@@ -221,7 +244,7 @@ def extract_spectral(audio: np.ndarray, sr: int) -> Dict:
         }
         
     except Exception as e:
-        print(f"Spectral extraction failed: {e}")
+        logger.error(f"Spectral extraction failed: {e}")
         return {
             "mfcc_means": [0] * 13,
             "mfcc_stds": [0] * 13,
@@ -243,11 +266,21 @@ def extract_all_features(audio: np.ndarray, sr: int, segments: List[Dict] = None
     Returns:
         Dictionary containing all features
     """
-    # Extract from full audio
-    prosody = extract_prosody(audio, sr)
-    loudness = extract_loudness(audio, sr)
-    quality = extract_voice_quality_librosa(audio, sr)
-    spectral = extract_spectral(audio, sr)
+    # Use speech-only audio if segments provided
+    analysis_audio = audio
+    if segments:
+        from vad import get_speech_only_audio
+        speech_audio = get_speech_only_audio(audio, sr, segments)
+        if len(speech_audio) > sr:  # At least 1 second of speech
+            analysis_audio = speech_audio
+            logger.info(f"Using speech-only audio: {len(speech_audio)/sr:.1f}s of {len(audio)/sr:.1f}s total")
+        else:
+            logger.warning("Speech-only audio too short, using full audio")
+    
+    prosody = extract_prosody(analysis_audio, sr)
+    loudness = extract_loudness(analysis_audio, sr)
+    quality = extract_voice_quality_librosa(analysis_audio, sr)
+    spectral = extract_spectral(analysis_audio, sr)
     
     return {
         "prosody": prosody,

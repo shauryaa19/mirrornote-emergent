@@ -5,8 +5,9 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import tempfile
 import logging
+import asyncio
 from pathlib import Path
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime
@@ -26,6 +27,16 @@ import prompt_builder
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+
+# Configure logging early
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Request timeout in seconds
+REQUEST_TIMEOUT_SECONDS = 120
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -97,6 +108,28 @@ class GuidedTextResponse(BaseModel):
     title: str
     category: str
     content: str
+
+# GPT Response validation model
+class GPTInsightsResponse(BaseModel):
+    """Validates and provides defaults for GPT analysis response"""
+    voice_personality: str = "Balanced Communicator"
+    headline: str = "Your voice has natural clarity"
+    key_insights: List[str] = []
+    strengths: List[str] = []
+    improvements: List[str] = []
+    tone_description: str = "balanced, approachable"
+    archetype: str = "Balanced Communicator"
+    overall_score: int = 75
+    clarity_score: int = 75
+    confidence_score: int = 70
+    actionable_tips: List[str] = []
+    
+    @validator('overall_score', 'clarity_score', 'confidence_score', pre=True)
+    def clamp_scores(cls, v):
+        """Ensure scores are within valid range"""
+        if isinstance(v, (int, float)):
+            return max(0, min(100, int(v)))
+        return 75  # Default if invalid
 
 # Add your routes to the router instead of directly to app
 @api_router.get("/")
@@ -251,11 +284,9 @@ async def analyze_voice(request: Request, request_data: VoiceAnalysisRequest):
         
         await db.assessments.insert_one(assessment)
         
-        # Process audio in background (simplified for now - in production use Celery/background tasks)
-        # For MVP, we'll process immediately
+        # Process audio
         try:
-            # ===== NEW ACOUSTIC ANALYSIS PIPELINE =====
-            
+            # ===== ACOUSTIC ANALYSIS PIPELINE =====
             # 1. Load audio from base64
             audio, sr = audio_utils.load_audio_from_base64(request_data.audio_base64, target_sr=16000)
             duration = audio_utils.get_audio_duration(audio, sr)
@@ -318,9 +349,17 @@ async def analyze_voice(request: Request, request_data: VoiceAnalysisRequest):
                         {"role": "system", "content": prompt_builder.SYSTEM_PROMPT},
                         {"role": "user", "content": gpt_prompt}
                     ],
-                    response_format={"type": "json_object"}
+                    response_format={"type": "json_object"},
+                    timeout=60  # 60 second timeout for GPT
                 )
-                gpt_insights = json.loads(gpt_response.choices[0].message.content)
+                raw_gpt_response = json.loads(gpt_response.choices[0].message.content)
+                # Validate and normalize GPT response using Pydantic model
+                validated_response = GPTInsightsResponse(**raw_gpt_response)
+                gpt_insights = validated_response.dict()
+                logger.info("GPT analysis completed and validated successfully")
+            except json.JSONDecodeError as e:
+                logger.error(f"GPT returned invalid JSON: {e}. Using rule-based insights.")
+                gpt_insights = {}
             except Exception as e:
                 logger.error(f"GPT analysis failed: {e}. Using rule-based insights.")
                 gpt_insights = {}
@@ -394,19 +433,43 @@ async def analyze_voice(request: Request, request_data: VoiceAnalysisRequest):
                 }}
             )
             
-            # Generate training questions
-            training_questions = generate_training_questions(analysis, transcription)
-            await db.training_questions.insert_one({
-                "assessment_id": assessment_id,
-                "questions": training_questions,
-                "created_at": datetime.utcnow()
-            })
+            # Generate training questions (with error handling - don't fail main request)
+            try:
+                training_questions = generate_training_questions(analysis, transcription)
+                await db.training_questions.insert_one({
+                    "assessment_id": assessment_id,
+                    "questions": training_questions,
+                    "created_at": datetime.utcnow()
+                })
+            except Exception as tq_error:
+                logger.error(f"Failed to generate training questions: {tq_error}")
+                # Don't fail the main request - training questions are non-critical
+            
+            # Track usage for this analysis
+            try:
+                await usage_service.track_analysis(user_id)
+                logger.info(f"Usage tracked for user {user_id}")
+            except Exception as usage_error:
+                logger.error(f"Failed to track usage: {usage_error}")
+                # Don't fail the request for usage tracking failures
             
             return VoiceAnalysisResponse(
                 assessment_id=assessment_id,
                 status="completed",
                 message="Analysis completed successfully"
             )
+            
+        except asyncio.TimeoutError:
+            logger.error(f"Request timed out after {REQUEST_TIMEOUT_SECONDS}s for assessment {assessment_id}")
+            await db.assessments.update_one(
+                {"assessment_id": assessment_id},
+                {"$set": {
+                    "processed": True,
+                    "error": "Request timed out",
+                    "processed_at": datetime.utcnow()
+                }}
+            )
+            raise HTTPException(status_code=504, detail="Request timed out. Please try a shorter recording.")
             
         except Exception as e:
             import traceback
@@ -481,110 +544,28 @@ async def get_assessments(request: Request, limit: int = 10, skip: int = 0):
         "total": await db.assessments.count_documents({"user_id": user["id"]})
     }
 
-def analyze_transcription(text: str, recording_time: int) -> Dict[str, Any]:
-    """
-    Analyze transcription using GPT-4
-    """
-    # Calculate basic metrics
-    word_count = len(text.split())
-    speaking_pace = int((word_count / recording_time) * 60) if recording_time > 0 else 0
-    
-    # Detect filler words
-    filler_words = detect_filler_words(text)
-    filler_count = sum(filler_words.values())
-    
-    # Use GPT-4 for advanced analysis
-    prompt = f"""Analyze this voice transcription and provide a detailed assessment:
-
-Transcription: "{text}"
-
-Speaking pace: {speaking_pace} WPM
-Filler words detected: {filler_count}
-
-Please provide:
-1. Voice Archetype (e.g., "Warm Storyteller", "Confident Presenter", "Analytical Thinker")
-2. Overall score (0-100)
-3. Clarity score (0-100)
-4. Confidence score (0-100)
-5. Tone analysis (professional/casual/friendly/etc)
-6. 3-4 key strengths
-7. 3-4 areas for improvement
-8. Estimated pitch range (Low/Medium/High with average Hz estimate)
-
-Format your response as JSON with these exact keys:
-{{
-  "archetype": "string",
-  "overall_score": number,
-  "clarity_score": number,
-  "confidence_score": number,
-  "tone": "string",
-  "strengths": ["string", "string", ...],
-  "improvements": ["string", "string", ...],
-  "pitch_avg": number,
-  "pitch_range": "Low/Medium/High"
-}}
-"""
-    
-    try:
-        response = openai_text_client.chat.completions.create(
-            model="gpt-4-turbo",
-            messages=[
-                {"role": "system", "content": "You are an expert voice and communication coach."},
-                {"role": "user", "content": prompt}
-            ],
-            response_format={"type": "json_object"}
-        )
-        
-        gpt_analysis = json.loads(response.choices[0].message.content)
-        
-        # Combine with basic metrics
-        return {
-            "archetype": gpt_analysis.get("archetype", "Emerging Communicator"),
-            "overall_score": gpt_analysis.get("overall_score", 70),
-            "clarity_score": gpt_analysis.get("clarity_score", 75),
-            "confidence_score": gpt_analysis.get("confidence_score", 70),
-            "tone": gpt_analysis.get("tone", "Neutral"),
-            "strengths": gpt_analysis.get("strengths", []),
-            "improvements": gpt_analysis.get("improvements", []),
-            "pitch_avg": gpt_analysis.get("pitch_avg", 150),
-            "pitch_range": gpt_analysis.get("pitch_range", "Medium"),
-            "speaking_pace": speaking_pace,
-            "filler_words": filler_words,
-            "filler_count": filler_count,
-            "word_count": word_count
-        }
-        
-    except Exception as e:
-        logger.error(f"Error in GPT analysis: {str(e)}")
-        # Return default analysis if GPT fails
-        return {
-            "archetype": "Emerging Communicator",
-            "overall_score": 70,
-            "clarity_score": 75,
-            "confidence_score": 70,
-            "tone": "Neutral",
-            "strengths": ["Clear articulation", "Good pacing"],
-            "improvements": ["Reduce filler words", "Vary tone more"],
-            "pitch_avg": 150,
-            "pitch_range": "Medium",
-            "speaking_pace": speaking_pace,
-            "filler_words": filler_words,
-            "filler_count": filler_count,
-            "word_count": word_count
-        }
-
 def detect_filler_words(text: str) -> Dict[str, int]:
     """
-    Detect filler words in transcription
+    Detect filler words in transcription.
+    Expanded patterns for comprehensive detection.
     """
     filler_patterns = {
-        "um": r'\bum\b',
-        "uh": r'\buh\b',
+        "um": r'\bum+\b',
+        "uh": r'\buh+\b',
+        "ah": r'\bah+\b',
+        "er": r'\ber+\b',
         "like": r'\blike\b',
         "you know": r'\byou know\b',
+        "I mean": r'\bi mean\b',
         "so": r'\bso\b',
+        "right": r'\bright\b',
+        "okay": r'\bokay\b',
         "actually": r'\bactually\b',
         "basically": r'\bbasically\b',
+        "literally": r'\bliterally\b',
+        "honestly": r'\bhonestly\b',
+        "kind of": r'\bkind of\b',
+        "sort of": r'\bsort of\b',
     }
     
     text_lower = text.lower()
@@ -672,13 +653,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
 
 # Add global exception handler to log all exceptions
 @app.exception_handler(HTTPException)

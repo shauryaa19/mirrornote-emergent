@@ -2,9 +2,17 @@
 Voice Activity Detection and timing analysis.
 """
 from typing import List, Dict
+import logging
 import numpy as np
 import webrtcvad
 import struct
+
+logger = logging.getLogger(__name__)
+
+# VAD configuration constants
+VAD_AGGRESSIVENESS = 2  # 0-3, higher = more aggressive (less false positives)
+MEANINGFUL_PAUSE_MS = 200  # Minimum pause duration to count
+LONG_PAUSE_MS = 700  # Threshold for "long" pauses
 
 
 def segment_speech(audio: np.ndarray, sr: int, frame_duration_ms: int = 30) -> List[Dict]:
@@ -27,7 +35,7 @@ def segment_speech(audio: np.ndarray, sr: int, frame_duration_ms: int = 30) -> L
     audio_int16 = (audio * 32767).astype(np.int16)
     
     # Initialize VAD
-    vad = webrtcvad.Vad(2)  # Aggressiveness 0-3, 2 is balanced
+    vad = webrtcvad.Vad(VAD_AGGRESSIVENESS)
     
     # Calculate frame size
     frame_size = int(sr * frame_duration_ms / 1000)
@@ -35,6 +43,7 @@ def segment_speech(audio: np.ndarray, sr: int, frame_duration_ms: int = 30) -> L
     # Process frames
     segments = []
     current_segment = None
+    vad_error_count = 0
     
     for i in range(0, len(audio_int16), frame_size):
         frame = audio_int16[i:i + frame_size]
@@ -49,7 +58,10 @@ def segment_speech(audio: np.ndarray, sr: int, frame_duration_ms: int = 30) -> L
         # Detect speech
         try:
             is_speech = vad.is_speech(frame_bytes, sr)
-        except Exception:
+        except Exception as e:
+            vad_error_count += 1
+            if vad_error_count <= 3:  # Log first few errors only
+                logger.warning(f"VAD error at frame {i}: {e}")
             is_speech = False
         
         # Calculate time
@@ -88,6 +100,10 @@ def segment_speech(audio: np.ndarray, sr: int, frame_duration_ms: int = 30) -> L
     if current_segment is not None:
         segments.append(current_segment)
     
+    # Log if there were many VAD errors
+    if vad_error_count > 3:
+        logger.warning(f"VAD encountered {vad_error_count} total errors during processing")
+    
     return segments
 
 
@@ -119,9 +135,9 @@ def compute_timing_metrics(segments: List[Dict], total_duration: float) -> Dict:
                 "duration_ms": duration * 1000
             })
     
-    # Filter meaningful pauses (> 200ms)
-    meaningful_pauses = [p for p in pause_events if p["duration_ms"] > 200]
-    long_pauses = [p for p in pause_events if p["duration_ms"] > 700]
+    # Filter meaningful pauses
+    meaningful_pauses = [p for p in pause_events if p["duration_ms"] > MEANINGFUL_PAUSE_MS]
+    long_pauses = [p for p in pause_events if p["duration_ms"] > LONG_PAUSE_MS]
     
     # Calculate metrics
     speech_ratio = speech_duration / total_duration if total_duration > 0 else 0
@@ -156,6 +172,7 @@ def get_speech_only_audio(audio: np.ndarray, sr: int, segments: List[Dict]) -> n
     speech_segments = [s for s in segments if s["type"] == "speech"]
     
     if not speech_segments:
+        logger.warning("No speech segments found, returning full audio")
         return audio
     
     speech_audio = []

@@ -22,3 +22,10 @@ dependencies = [
     "webrtcvad==2.0.10",
     "setuptools",
 ]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+]
+
